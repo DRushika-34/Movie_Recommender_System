@@ -1,0 +1,108 @@
+import pandas as pd
+import numpy as np
+import ast
+
+moviemeta=pd.read_csv('/content/movies_metadata.csv',low_memory=False)
+credits=pd.read_csv('/content/credits.csv',low_memory=False)
+
+mergeddata = pd.concat([moviemeta,credits],axis=1,join="outer")
+mergeddata.drop(mergeddata.columns[len(mergeddata.columns)-1], axis=1, inplace=True)
+mergeddata.head(5)
+
+keywords=pd.read_csv('/content/keywords.csv')
+movies = pd.concat([mergeddata,keywords],axis=1,join="outer")
+#movies.drop(movies.columns[len(movies.columns)-2], axis=1, inplace=True)
+movies.head(1)
+
+movies = movies[['id','title','overview','genres','keywords', 'cast','crew']]
+movies.head(2)
+
+movies.dropna(inplace=True)
+movies.drop_duplicates()
+movies.shape
+movies.head()
+
+movies.iloc[0].genres
+#need to convert into ['Animation','Comedy','Family']
+
+def convert(obj):
+  l=[]
+  for i in ast.literal_eval(obj):
+    l.append(i['name'])
+  return l
+
+movies['genres'] = movies['genres'].apply(convert)
+movies['keywords'] = movies['keywords'].apply(convert)
+movies.head(2)
+
+def convert3(obj):
+  l=[]
+  cnt=0
+  for i in ast.literal_eval(obj):
+    l.append(i['name'])
+    cnt=cnt+1
+    if(cnt==3):
+      break
+  return l
+
+movies['cast'] = movies['cast'].apply(convert3)
+movies.head(2)
+
+def fetch_director(obj):
+  l=[]
+  for i in ast.literal_eval(obj):
+    if i['job'] == 'Director':
+      l.append(i['name'])
+  return l    
+
+movies['crew'] = movies['crew'].apply(fetch_director)
+
+movies['genres'] = movies['genres'].apply(lambda x:[i.replace(" ","")for i in x])
+movies['cast'] = movies['cast'].apply(lambda x:[i.replace(" ","")for i in x])
+movies['crew'] = movies['crew'].apply(lambda x:[i.replace(" ","")for i in x])
+movies['keywords'] = movies['keywords'].apply(lambda x:[i.replace(" ","")for i in x])
+
+movies['tags'] =  movies['genres'] + movies['keywords'] + movies['cast'] + movies['crew']
+movies.head() 
+
+new_df=movies[['id','title','tags','overview']]
+new_df['tags'] = new_df['tags'].apply(lambda x:" ".join(x))
+new_df
+      
+new_df['tags'] = new_df['tags'].apply(lambda x:x.lower())
+new_df.head(3)
+
+import nltk
+
+from nltk.stem.porter import PorterStemmer
+
+ps = PorterStemmer()
+
+def stem(text):
+  y=[]
+  for i in text.split():
+    y.append(ps.stem(i))
+  return " ".join(y)  
+
+new_df['tags'] = new_df['tags'].apply(stem)
+
+new_df.to_csv('Cleandata.csv', index = False)
+
+from sklearn.feature_extraction.text import CountVectorizer
+cv=CountVectorizer(max_features=5000,stop_words='english')
+vectors = cv.fit_transform(new_df['tags']).toarray()
+vectors
+
+cv.get_feature_names()
+
+from sklearn.metrics.pairwise import cosine_similarity
+
+similarity = cosine_similarity(vectors)
+
+similarity
+
+import pickle
+pickle.dump(new_df,open('movies.pkl','wb'))
+pickle.dump(new_df.to_dict(),open('movies_dict.pkl','wb'))
+pickle.dump(similarity,open('similarity.pkl','wb'))
+      
